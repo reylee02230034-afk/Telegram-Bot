@@ -11,6 +11,8 @@ FROM base AS builder
 COPY --from=deps /app ./
 WORKDIR /app/apps/web
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV JWT_SECRET=docker_build_time_secret_please_ignore
+ENV NODE_ENV=production
 RUN npm run build
 
 FROM node:22-alpine AS runner
