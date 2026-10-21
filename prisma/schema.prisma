@@ -1,0 +1,256 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String       @id @default(cuid())
+  telegramId      BigInt       @unique
+  username        String?
+  firstName       String?
+  lastName        String?
+  avatarUrl       String?
+  languageCode    String?
+  isPremium       Boolean      @default(false)
+  role            UserRole
+  banned          Boolean      @default(false)
+  banReason       String?
+  hasOnboarded    Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  teacherProfile  TeacherProfile?
+  bookingsMade    Booking[]    @relation("BookingStudent")
+  notifications   Notification[]
+  reportsSent     Report[]     @relation("ReportSender")
+  reportsHandled  Report[]     @relation("ReportHandler")
+  auditLogs       AuditLog[]
+  roleSwitchRequests RoleSwitchRequest[]
+  roleSwitchesHandled RoleSwitchRequest[] @relation("RoleSwitchHandler")
+
+  @@index([telegramId])
+}
+
+model TeacherProfile {
+  id                  String            @id @default(cuid())
+  userId              String            @unique
+
+  displayName         String
+  bio                 String?
+  age                 Int?
+  heightCm            Int?
+  weightKg            Float?
+  subjects            String?
+  priceInfo           String?
+  coverPhotoUrl       String?
+  homepageUrl         String?
+
+  latitude            Float
+  longitude           Float
+  geohash5            String
+  geohash4            String
+  lastLocationAt      DateTime?
+
+  isOnline            Boolean           @default(false)
+  onlineSince         DateTime?
+  approvalStatus      ApprovalStatus    @default(PENDING)
+  rejectionReason     String?
+
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  user                User              @relation(fields: [userId], references: [id])
+  media               TeacherMedia[]
+  bookings            Booking[]
+  reports             Report[]
+  auditLogs           AuditLog[]
+
+  @@index([geohash5])
+  @@index([geohash4])
+  @@index([isOnline, approvalStatus])
+  @@index([lastLocationAt])
+}
+
+model TeacherMedia {
+  id               String           @id @default(cuid())
+  teacherId        String
+  type             MediaType
+  url              String
+  thumbnailUrl     String?
+  fileSizeBytes    BigInt
+  mime             String
+  width            Int?
+  height           Int?
+  durationSec      Int?
+  sortOrder        Int              @default(0)
+  moderationStatus ModerationStatus  @default(APPROVED)
+  moderationNote   String?
+  uploadedAt       DateTime         @default(now())
+
+  teacher          TeacherProfile   @relation(fields: [teacherId], references: [id])
+
+  @@index([teacherId, moderationStatus])
+}
+
+model Booking {
+  id          String        @id @default(cuid())
+  studentId   String
+  teacherId   String
+  status      BookingStatus @default(PENDING)
+  scheduledAt DateTime
+  price       Float
+  notes       String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  student     User          @relation("BookingStudent", fields: [studentId], references: [id])
+  teacher     TeacherProfile @relation(fields: [teacherId], references: [id])
+}
+
+model RoleSwitchRequest {
+  id             String         @id @default(cuid())
+  userId         String
+  requestedRole  UserRole
+  reason         String?
+  status         SwitchStatus  @default(PENDING)
+  handledById    String?
+  handledAt      DateTime?
+  handledNote    String?
+  createdAt      DateTime      @default(now())
+
+  user           User           @relation(fields: [userId], references: [id])
+  handler        User?          @relation("RoleSwitchHandler", fields: [handledById], references: [id])
+
+  @@index([status])
+  @@index([userId])
+}
+
+model Notification {
+  id          String           @id @default(cuid())
+  userId      String
+  type        NotificationType
+  title       String
+  body        String
+  sentAt      DateTime         @default(now())
+  delivered   Boolean          @default(false)
+  telegramMessageId Int?
+
+  user        User             @relation(fields: [userId], references: [id])
+
+  @@index([userId, delivered])
+}
+
+model Report {
+  id          String       @id @default(cuid())
+  reporterId  String
+  targetType  ReportTargetType
+  targetId    String
+  reason      String
+  description String?
+  status      ReportStatus @default(OPEN)
+  handledById String?
+  handledAt   DateTime?
+  resolution  String?
+  createdAt   DateTime     @default(now())
+
+  reporter    User         @relation("ReportSender", fields: [reporterId], references: [id])
+  handler     User?        @relation("ReportHandler", fields: [handledById], references: [id])
+  teacher     TeacherProfile? @relation(fields: [targetId], references: [id])
+
+  @@index([status])
+  @@index([targetType, targetId])
+}
+
+model AuditLog {
+  id         String     @id @default(cuid())
+  userId     String?
+  teacherId  String?
+  action     String
+  entityType String
+  entityId   String?
+  details    Json?
+  ipAddress  String?
+  createdAt  DateTime   @default(now())
+
+  user       User?      @relation(fields: [userId], references: [id])
+  teacher    TeacherProfile? @relation(fields: [teacherId], references: [id])
+
+  @@index([action, createdAt])
+  @@index([entityType, entityId])
+}
+
+enum UserRole {
+  STUDENT
+  TEACHER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+enum ModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum NotificationType {
+  BOOKING_REQUEST
+  BOOKING_CONFIRMED
+  TEACHER_ONLINE
+  ROLE_SWITCH_RESULT
+  SYSTEM_NOTICE
+}
+
+enum ReportTargetType {
+  TEACHER
+  BOOKING
+  USER
+  MEDIA
+}
+
+enum ReportStatus {
+  OPEN
+  INVESTIGATING
+  RESOLVED
+  DISMISSED
+}
+
+enum SwitchStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model StudentPresence {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  latitude    Float
+  longitude   Float
+  geohash4    String?
+  lastSeenAt  DateTime @updatedAt
+  
+  @@index([lastSeenAt])
+  @@index([geohash4])
+}

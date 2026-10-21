@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --tg-bg: var(--tg-theme-bg-color, #ffffff);
+  --tg-text: var(--tg-theme-text-color, #17212b);
+  --tg-hint: var(--tg-theme-hint-color, #708499);
+  --tg-button: var(--tg-theme-button-color, #3390ec);
+  --tg-button-text: var(--tg-theme-button-text-color, #ffffff);
+  --tg-secondary-bg: var(--tg-theme-secondary-bg-color, #f4f4f5);
+}
+
+html, body {
+  background: var(--tg-bg);
+  color: var(--tg-text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  height: 100%;
+}
+
+#__next {
+  min-height: 100vh;
+  height: auto;
+}
+
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  background: var(--tg-secondary-bg);
+}
+
+.btn-primary {
+  background: var(--tg-button);
+  color: var(--tg-button-text);
+  border: none;
+  border-radius: 12px;
+  padding: 12px 20px;
+  font-weight: 600;
+  width: 100%;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-primary:hover { opacity: 0.9; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.card {
+  background: var(--tg-secondary-bg);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  background: var(--tg-secondary-bg);
+  color: var(--tg-hint);
+}
+.tag-open { background: #d1fae5; color: #065f46; }
+.tag-closed { background: #fee2e2; color: #991b1b; }
+
+.input-field {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--tg-secondary-bg);
+  border-radius: 12px;
+  background: var(--tg-secondary-bg);
+  color: var(--tg-text);
+  font-size: 16px;
+  outline: none;
+}
+.input-field:focus { border-color: var(--tg-button); }
