@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl python3
 FROM base AS deps
 COPY . .
 RUN mkdir -p /app/apps/web/public && mkdir -p /app/storage/uploads
-RUN npm ci --ignore-scripts || npm install
+RUN npm ci --ignore-scripts
 RUN npx prisma generate
 
 FROM base AS builder
