@@ -2,7 +2,7 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: local-service-postgres
-    command: postgres -c shared_buffers=64MB -c max_connections=40 -c work_mem=4MB
+    command: postgres -c shared_buffers=64MB -c max_connections=100 -c work_mem=2MB
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
