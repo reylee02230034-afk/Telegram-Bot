@@ -1,4 +1,8 @@
-yuekebot.888.moe {
+{
+	acme_ca https://acme-v02.api.letsencrypt.org/directory
+}
+
+yuekebot.kz.ci {
 	encode zstd gzip
 	reverse_proxy web:3000
 }
