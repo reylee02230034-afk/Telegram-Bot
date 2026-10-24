@@ -42,7 +42,7 @@ export async function POST(req: Request) {
   }
   const { initData, telegramId, firstName, username, role, dev } = parsed.data;
 
-  const isDevMode = dev && process.env.NODE_ENV !== 'production';
+  const isDevMode = dev && (process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEV_LOGIN === 'true');
 
   if (!isDevMode && initData) {
     const valid = verifyTelegramInitData(initData);

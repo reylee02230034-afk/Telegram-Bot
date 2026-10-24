@@ -42,6 +42,8 @@ async function ensureAuth(): Promise<boolean> {
     }
   } else {
     body.dev = true;
+    body.telegramId = '100000001';
+    body.firstName = '访客';
   }
 
   const loginRes = await fetch('/api/auth/login', {
