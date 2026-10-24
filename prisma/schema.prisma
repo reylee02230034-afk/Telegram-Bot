@@ -42,8 +42,10 @@ model TeacherProfile {
   displayName         String
   bio                 String?
   age                 Int?
+  hometown            String?
   heightCm            Int?
   weightKg            Float?
+  bust                String?
   subjects            String?
   priceInfo           String?
   coverPhotoUrl       String?

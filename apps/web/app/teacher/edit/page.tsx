@@ -6,8 +6,10 @@ interface TeacherData {
   displayName: string;
   bio: string | null;
   age: number | null;
+  hometown: string | null;
   heightCm: number | null;
   weightKg: number | null;
+  bust: string | null;
   subjects: string | null;
   priceInfo: string | null;
   coverPhotoUrl: string | null;
@@ -15,45 +17,54 @@ interface TeacherData {
   media: { id: string; type: string; url: string }[];
 }
 
-interface PriceTier {
-  id: string;
-  type: 'single' | 'double' | 'package' | 'monthly' | 'custom';
-  label: string;
-  desc: string;
+interface PriceFields {
+  single: string;
+  double: string;
+  overnight: string;
+  other: string;
 }
 
-const PRICE_TYPES: Record<PriceTier['type'], { label: string; icon: string }> = {
-  single: { label: '单课', icon: '🎯' },
-  double: { label: '双课', icon: '⚡' },
-  package: { label: '包时/包课', icon: '📦' },
-  monthly: { label: '包月', icon: '📅' },
-  custom: { label: '自定义', icon: '✨' },
-};
+const EMPTY_PRICES: PriceFields = { single: '', double: '', overnight: '', other: '' };
+const PRICE_LABELS: { key: keyof PriceFields; label: string; placeholder: string }[] = [
+  { key: 'single', label: '一课价格', placeholder: '如 300元' },
+  { key: 'double', label: '两课价格', placeholder: '如 550元' },
+  { key: 'overnight', label: '包夜价格', placeholder: '如 1000元' },
+  { key: 'other', label: '其它', placeholder: '如 路远加价 / 包月' },
+];
 
-function parsePriceInfo(text: string): PriceTier[] {
-  if (!text) return [];
-  const lines = text.split(/\n+/).map((s) => s.trim()).filter(Boolean);
-  const tiers: PriceTier[] = [];
-  lines.forEach((line, idx) => {
-    let type: PriceTier['type'] = 'custom';
-    if (/单课|单次|1节课|每小时/.test(line)) type = 'single';
-    else if (/双课|连报|2节课|2小时/.test(line)) type = 'double';
-    else if (/包|套餐|包月|不限次/.test(line)) type = 'monthly';
-    else if (/课包|包\d+课|课时包/.test(line)) type = 'package';
-    tiers.push({
-      id: `t_${Date.now()}_${idx}`,
-      type,
-      label: line,
-      desc: '',
-    });
+function parsePrices(text: string | null): PriceFields {
+  const result: PriceFields = { ...EMPTY_PRICES };
+  if (!text) return result;
+  text.split(/\n+/).map((s) => s.trim()).filter(Boolean).forEach((line) => {
+    const value = line.replace(/^.*?(一课|单课|单次|两课|双课|包夜|包时|其它|其他)[:：\s]*/, '').trim() || line;
+    if (/一课|单课|单次/.test(line)) result.single = value;
+    else if (/两课|双课|连报/.test(line)) result.double = value;
+    else if (/包夜/.test(line)) result.overnight = value;
+    else result.other = result.other ? `${result.other}；${line}` : line;
   });
-  return tiers;
+  return result;
 }
 
-function serializePriceTiers(tiers: PriceTier[]): string {
-  return tiers
-    .map((t) => (t.desc ? `${t.label} ${t.desc}` : t.label))
-    .join('\n');
+function serializePrices(prices: PriceFields): string | null {
+  const lines: string[] = [];
+  if (prices.single.trim()) lines.push(`一课 ${prices.single.trim()}`);
+  if (prices.double.trim()) lines.push(`两课 ${prices.double.trim()}`);
+  if (prices.overnight.trim()) lines.push(`包夜 ${prices.overnight.trim()}`);
+  if (prices.other.trim()) lines.push(`其它 ${prices.other.trim()}`);
+  return lines.length > 0 ? lines.join('\n') : null;
+}
+
+function composeBio(fields: {
+  age: string; hometown: string; heightCm: string; weightKg: string; bust: string; subjects: string;
+}): string | null {
+  const parts: string[] = [];
+  if (fields.age.trim()) parts.push(`${fields.age.trim()}岁`);
+  if (fields.hometown.trim()) parts.push(fields.hometown.trim());
+  if (fields.heightCm.trim()) parts.push(`${fields.heightCm.trim()}cm`);
+  if (fields.weightKg.trim()) parts.push(`${fields.weightKg.trim()}kg`);
+  if (fields.bust.trim()) parts.push(`胸围 ${fields.bust.trim()}`);
+  if (fields.subjects.trim()) parts.push(`服务：${fields.subjects.trim()}`);
+  return parts.length > 0 ? parts.join(' · ') : null;
 }
 
 interface TgWebApp {
@@ -74,7 +85,7 @@ async function ensureAuth(): Promise<boolean> {
     tg.ready();
     tg.expand();
   }
-  const meRes = await fetch('/api/auth/me');
+  const meRes = await fetch('/api/auth/me', { cache: 'no-store' });
   if (meRes.ok) return true;
   if (!tg || !tg.initData) return false;
 
@@ -130,12 +141,13 @@ export default function TeacherEditPage() {
   const [message, setMessage] = useState<string | null>(null);
 
   const [displayName, setDisplayName] = useState('');
-  const [bio, setBio] = useState('');
   const [age, setAge] = useState('');
+  const [hometown, setHometown] = useState('');
   const [heightCm, setHeightCm] = useState('');
   const [weightKg, setWeightKg] = useState('');
+  const [bust, setBust] = useState('');
   const [subjects, setSubjects] = useState('');
-  const [priceTiers, setPriceTiers] = useState<PriceTier[]>([]);
+  const [prices, setPrices] = useState<PriceFields>(EMPTY_PRICES);
   const [coverPhotoUrl, setCoverPhotoUrl] = useState('');
   const [homepageUrl, setHomepageUrl] = useState('');
 
@@ -175,8 +187,10 @@ export default function TeacherEditPage() {
         displayName: tp.displayName,
         bio: tp.bio,
         age: tp.age,
+        hometown: tp.hometown ?? null,
         heightCm: tp.heightCm,
         weightKg: tp.weightKg,
+        bust: tp.bust ?? null,
         subjects: tp.subjects,
         priceInfo: tp.priceInfo,
         coverPhotoUrl: tp.coverPhotoUrl,
@@ -184,31 +198,21 @@ export default function TeacherEditPage() {
         media: tp.media || [],
       });
       setDisplayName(tp.displayName || '');
-      setBio(tp.bio || '');
       setAge(tp.age != null ? String(tp.age) : '');
+      setHometown(tp.hometown || '');
       setHeightCm(tp.heightCm != null ? String(tp.heightCm) : '');
       setWeightKg(tp.weightKg != null ? String(tp.weightKg) : '');
+      setBust(tp.bust || '');
       setSubjects(tp.subjects || '');
-      setPriceTiers(parsePriceInfo(tp.priceInfo || ''));
+      setPrices(parsePrices(tp.priceInfo));
       setCoverPhotoUrl(tp.coverPhotoUrl || '');
       setHomepageUrl(tp.homepageUrl || '');
       setLoading(false);
     })();
   }, []);
 
-  const addTier = () => {
-    setPriceTiers((prev) => [
-      ...prev,
-      { id: `t_${Date.now()}`, type: 'single', label: '', desc: '' },
-    ]);
-  };
-
-  const updateTier = (id: string, patch: Partial<PriceTier>) => {
-    setPriceTiers((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
-  };
-
-  const removeTier = (id: string) => {
-    setPriceTiers((prev) => prev.filter((t) => t.id !== id));
+  const updatePrice = (key: keyof PriceFields, value: string) => {
+    setPrices((prev) => ({ ...prev, [key]: value }));
   };
 
   const handleSave = async () => {
@@ -217,12 +221,14 @@ export default function TeacherEditPage() {
     try {
       const body: any = {
         displayName,
-        bio: bio || null,
+        bio: composeBio({ age, hometown, heightCm, weightKg, bust, subjects }),
         age: age ? parseInt(age) : null,
+        hometown: hometown.trim() || null,
         heightCm: heightCm ? parseInt(heightCm) : null,
         weightKg: weightKg ? parseFloat(weightKg) : null,
-        subjects: subjects || null,
-        priceInfo: priceTiers.length > 0 ? serializePriceTiers(priceTiers) : null,
+        bust: bust.trim() || null,
+        subjects: subjects.trim() || null,
+        priceInfo: serializePrices(prices),
         coverPhotoUrl: coverPhotoUrl || null,
         homepageUrl: homepageUrl || null,
       };
@@ -253,8 +259,10 @@ export default function TeacherEditPage() {
             displayName: t.displayName,
             bio: t.bio,
             age: t.age,
+            hometown: t.hometown ?? null,
             heightCm: t.heightCm,
             weightKg: t.weightKg,
+            bust: t.bust ?? null,
             subjects: t.subjects,
             priceInfo: t.priceInfo,
             coverPhotoUrl: t.coverPhotoUrl,
@@ -302,7 +310,7 @@ export default function TeacherEditPage() {
           setMessage(`❌ ${data.error || '上传失败'}`);
         }
       }
-      const meRes = await fetch('/api/auth/me');
+      const meRes = await fetch('/api/auth/me', { cache: 'no-store' });
       const meData = await meRes.json();
       if (meData.ok && meData.user?.teacherProfile) {
         setTeacher((t) => t ? { ...t, media: meData.user.teacherProfile.media } : t);
@@ -341,11 +349,6 @@ export default function TeacherEditPage() {
     borderRadius: 8, fontSize: 14, boxSizing: 'border-box',
   };
 
-  const selectStyle: React.CSSProperties = {
-    padding: '8px 6px', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13,
-    background: '#f8fafc',
-  };
-
   return (
     <div style={{ minHeight: '100dvh', background: '#f8fafc', paddingBottom: 'calc(env(safe-area-inset-bottom) + 90px)' }}>
       <div style={{ background: 'linear-gradient(135deg, #3390ec 0%, #1d4ed8 100%)', padding: 'calc(env(safe-area-inset-top) + 12px) 16px 16px', color: 'white', position: 'relative' }}>
@@ -371,11 +374,15 @@ export default function TeacherEditPage() {
         </div>
 
         <div style={{ background: 'white', borderRadius: 12, padding: 16, marginBottom: 12 }}>
-          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>👤 个人信息</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>👤 简介</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
             <div>
               <label style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4, display: 'block' }}>年龄</label>
               <input value={age} onChange={(e) => setAge(e.target.value)} placeholder="岁" style={inputStyle} inputMode="numeric" />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4, display: 'block' }}>哪里人</label>
+              <input value={hometown} onChange={(e) => setHometown(e.target.value)} placeholder="如 上海" style={inputStyle} />
             </div>
             <div>
               <label style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4, display: 'block' }}>身高</label>
@@ -385,80 +392,32 @@ export default function TeacherEditPage() {
               <label style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4, display: 'block' }}>体重</label>
               <input value={weightKg} onChange={(e) => setWeightKg(e.target.value)} placeholder="kg" style={inputStyle} inputMode="decimal" />
             </div>
+            <div>
+              <label style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4, display: 'block' }}>胸围</label>
+              <input value={bust} onChange={(e) => setBust(e.target.value)} placeholder="如 88C" style={inputStyle} />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4, display: 'block' }}>服务项目</label>
+              <input value={subjects} onChange={(e) => setSubjects(e.target.value)} placeholder="如 按摩 / 陪伴" style={inputStyle} />
+            </div>
           </div>
         </div>
 
         <div style={{ background: 'white', borderRadius: 12, padding: 16, marginBottom: 12 }}>
-          <label style={{ fontSize: 12, color: '#64748b', marginBottom: 6, display: 'block' }}>🎯 教授内容</label>
-          <input value={subjects} onChange={(e) => setSubjects(e.target.value)} placeholder="如: 成人英语 / 考研数学 / 钢琴" style={inputStyle} />
-        </div>
-
-        <div style={{ background: 'white', borderRadius: 12, padding: 16, marginBottom: 12 }}>
-          <label style={{ fontSize: 12, color: '#64748b', marginBottom: 6, display: 'block' }}>📝 个人简介</label>
-          <textarea value={bio} onChange={(e) => setBio(e.target.value)} placeholder="介绍一下您自己、教学经验、擅长的方向..." rows={4}
-            style={{ ...inputStyle, resize: 'vertical' }} />
-        </div>
-
-        <div style={{ background: 'white', borderRadius: 12, padding: 16, marginBottom: 12 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <label style={{ fontSize: 12, color: '#64748b' }}>💰 价格方案</label>
-            <button onClick={addTier}
-              style={{ padding: '4px 12px', background: '#3390ec', color: 'white', border: 'none', borderRadius: 12, fontSize: 12, cursor: 'pointer' }}
-            >➕ 添加方案</button>
+          <label style={{ fontSize: 12, color: '#64748b', marginBottom: 10, display: 'block' }}>💰 价格</label>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+            {PRICE_LABELS.map((p) => (
+              <div key={p.key}>
+                <label style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4, display: 'block' }}>{p.label}</label>
+                <input
+                  value={prices[p.key]}
+                  onChange={(e) => updatePrice(p.key, e.target.value)}
+                  placeholder={p.placeholder}
+                  style={inputStyle}
+                />
+              </div>
+            ))}
           </div>
-
-          {priceTiers.length === 0 ? (
-            <div style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', padding: '20px 0', border: '1px dashed #e2e8f0', borderRadius: 8 }}>
-              还没有价格方案，点击上方按钮添加
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {priceTiers.map((t, idx) => (
-                <div key={t.id} style={{
-                  display: 'flex', alignItems: 'flex-start', gap: 8,
-                  padding: 10, background: '#f8fafc', borderRadius: 8,
-                }}>
-                  <div style={{ fontSize: 13, color: '#94a3b8', minWidth: 20, paddingTop: 8 }}>{idx + 1}.</div>
-                  <select value={t.type} onChange={(e) => updateTier(t.id, { type: e.target.value as PriceTier['type'] })}
-                    style={selectStyle}>
-                    {(Object.keys(PRICE_TYPES) as PriceTier['type'][]).map((k) => (
-                      <option key={k} value={k}>{PRICE_TYPES[k].icon} {PRICE_TYPES[k].label}</option>
-                    ))}
-                  </select>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
-                    <input
-                      value={t.label}
-                      onChange={(e) => updateTier(t.id, { label: e.target.value })}
-                      placeholder="如: 150元/小时"
-                      style={{ ...inputStyle, padding: '7px 10px', fontSize: 13 }}
-                    />
-                    <input
-                      value={t.desc}
-                      onChange={(e) => updateTier(t.id, { desc: e.target.value })}
-                      placeholder="补充说明（可选，如: 首课时半价）"
-                      style={{ ...inputStyle, padding: '7px 10px', fontSize: 12, background: '#fff' }}
-                    />
-                  </div>
-                  <button onClick={() => removeTier(t.id)}
-                    style={{
-                      width: 28, height: 28, borderRadius: '50%',
-                      background: '#fee2e2', color: '#ef4444',
-                      border: 'none', cursor: 'pointer', fontSize: 14, flexShrink: 0,
-                    }}
-                  >✕</button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {priceTiers.length > 0 && (
-            <div style={{ marginTop: 12, padding: 10, background: '#f1f5f9', borderRadius: 8, fontSize: 12, color: '#64748b' }}>
-              <div style={{ color: '#94a3b8', marginBottom: 4 }}>预览保存后的格式：</div>
-              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>
-                {serializePriceTiers(priceTiers)}
-              </pre>
-            </div>
-          )}
         </div>
 
         <div style={{ background: 'white', borderRadius: 12, padding: 16, marginBottom: 12 }}>

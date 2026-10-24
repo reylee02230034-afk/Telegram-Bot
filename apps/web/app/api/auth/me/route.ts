@@ -5,9 +5,11 @@ import prisma from '@/lib/prisma';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const NO_STORE = { 'Cache-Control': 'no-store, max-age=0, must-revalidate' };
+
 export async function GET(req: Request) {
   const auth = await getAuthFromRequest(req);
-  if (!auth) return NextResponse.json({ error: '未登录' }, { status: 401 });
+  if (!auth) return NextResponse.json({ error: '未登录' }, { status: 401, headers: NO_STORE });
 
   const user = await prisma.user.findUnique({
     where: { id: auth.userId },
@@ -23,7 +25,7 @@ export async function GET(req: Request) {
     },
   });
 
-  if (!user) return NextResponse.json({ error: '用户不存在' }, { status: 404 });
+  if (!user) return NextResponse.json({ error: '用户不存在' }, { status: 404, headers: NO_STORE });
 
   if (auth.role !== user.role || auth.isTeacher !== !!user.teacherProfile) {
     await signAuthCookies({
@@ -50,8 +52,10 @@ export async function GET(req: Request) {
             displayName: user.teacherProfile.displayName,
             bio: user.teacherProfile.bio,
             age: user.teacherProfile.age,
+            hometown: user.teacherProfile.hometown,
             heightCm: user.teacherProfile.heightCm,
             weightKg: user.teacherProfile.weightKg,
+            bust: user.teacherProfile.bust,
             subjects: user.teacherProfile.subjects,
             priceInfo: user.teacherProfile.priceInfo,
             coverPhotoUrl: user.teacherProfile.coverPhotoUrl,
@@ -68,5 +72,5 @@ export async function GET(req: Request) {
           }
         : null,
     },
-  });
+  }, { headers: NO_STORE });
 }

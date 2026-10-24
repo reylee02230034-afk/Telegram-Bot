@@ -20,8 +20,16 @@ type BotRole = 'TEACHER' | 'STUDENT';
 type OnboardStep =
   | 'awaiting_role'
   | 'teacher_media'
-  | 'teacher_bio'
-  | 'teacher_price'
+  | 'teacher_age'
+  | 'teacher_hometown'
+  | 'teacher_height'
+  | 'teacher_weight'
+  | 'teacher_bust'
+  | 'teacher_services'
+  | 'teacher_price_single'
+  | 'teacher_price_double'
+  | 'teacher_price_overnight'
+  | 'teacher_price_other'
   | 'teacher_homepage'
   | 'teacher_location'
   | 'done';
@@ -31,8 +39,17 @@ interface BotSession {
   role?: BotRole;
   tempTeacher?: {
     displayName?: string;
+    age?: number;
+    hometown?: string;
+    heightCm?: number;
+    weightKg?: number;
+    bust?: string;
+    subjects?: string;
+    priceSingle?: string;
+    priceDouble?: string;
+    priceOvernight?: string;
+    priceOther?: string;
     bio?: string;
-    priceInfo?: string;
     homepageUrl?: string;
     latitude?: number;
     longitude?: number;
@@ -41,6 +58,12 @@ interface BotSession {
 }
 
 type MyContext = Context & SessionFlavor<BotSession>;
+
+// Telegram 会复用同一个 Mini App WebView，加时间戳强制重新加载页面，避免切换身份后仍显示旧角色
+function pageUrl(path: string): string {
+  const sep = path.includes('?') ? '&' : '?';
+  return `${MINI_APP_URL}${path}${sep}_v=${Date.now()}`;
+}
 
 async function getTelegramFileUrl(fileId: string): Promise<string | null> {
   try {
@@ -79,7 +102,7 @@ function makeBot(): Bot<MyContext> {
 
     if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
       const kb = new InlineKeyboard()
-        .webApp('🗺️ 进入地图', `${MINI_APP_URL}/maps`)
+        .webApp('🗺️ 进入地图', pageUrl('/maps'))
         .row();
       return await ctx.reply(
         `👋 欢迎回来，管理员 ${user.firstName || ''}！\n\n您可以直接进入地图，或通过数据库管理用户和申请。`,
@@ -237,17 +260,9 @@ function makeBot(): Bot<MyContext> {
   });
 
   bot.callbackQuery('skip_media', async (ctx) => {
-    ctx.session.step = 'teacher_bio';
+    ctx.session.step = 'teacher_age';
     await ctx.answerCallbackQuery();
-    await ctx.reply('📝 请输入您的简介（学生将看到），或点击"跳过简介"：', {
-      reply_markup: new InlineKeyboard().text('跳过简介', 'skip_bio'),
-    });
-  });
-
-  bot.callbackQuery('skip_bio', async (ctx) => {
-    ctx.session.step = 'teacher_price';
-    await ctx.answerCallbackQuery();
-    await ctx.reply('💰 请输入您的价格信息（如：100元/小时）：');
+    await ctx.reply('👤 简介 1/6：请输入年龄（岁）。可发送 - 跳过');
   });
 
   bot.callbackQuery('skip_homepage', async (ctx) => {
@@ -257,11 +272,9 @@ function makeBot(): Bot<MyContext> {
   });
 
   bot.callbackQuery('finish_media', async (ctx) => {
-    ctx.session.step = 'teacher_bio';
+    ctx.session.step = 'teacher_age';
     await ctx.answerCallbackQuery();
-    await ctx.reply('📝 请输入您的简介，或点击"跳过简介"：', {
-      reply_markup: new InlineKeyboard().text('跳过简介', 'skip_bio'),
-    });
+    await ctx.reply('👤 简介 1/6：请输入年龄（岁）。可发送 - 跳过');
   });
 
   bot.on(':location', async (ctx) => {
@@ -333,17 +346,85 @@ function makeBot(): Bot<MyContext> {
       case 'awaiting_role':
         return await askRole(ctx);
 
-      case 'teacher_bio':
-        ctx.session.tempTeacher!.bio = text;
-        ctx.session.step = 'teacher_price';
-        return await ctx.reply('💰 请输入您的价格信息（如：100元/小时）：');
+      case 'teacher_age': {
+        if (text !== '-') {
+          const n = parseInt(text, 10);
+          if (!Number.isFinite(n) || n < 1 || n > 99) {
+            return await ctx.reply('请输入有效年龄（1-99 的数字），或发送 - 跳过');
+          }
+          ctx.session.tempTeacher!.age = n;
+        }
+        ctx.session.step = 'teacher_hometown';
+        return await ctx.reply('👤 简介 2/6：哪里人？可发送 - 跳过');
+      }
 
-      case 'teacher_price':
-        ctx.session.tempTeacher!.priceInfo = text;
+      case 'teacher_hometown': {
+        if (text !== '-') ctx.session.tempTeacher!.hometown = text.slice(0, 60);
+        ctx.session.step = 'teacher_height';
+        return await ctx.reply('👤 简介 3/6：身高（cm）？可发送 - 跳过');
+      }
+
+      case 'teacher_height': {
+        if (text !== '-') {
+          const n = parseInt(text, 10);
+          if (!Number.isFinite(n) || n < 100 || n > 250) {
+            return await ctx.reply('请输入有效身高（100-250 的数字），或发送 - 跳过');
+          }
+          ctx.session.tempTeacher!.heightCm = n;
+        }
+        ctx.session.step = 'teacher_weight';
+        return await ctx.reply('👤 简介 4/6：体重（kg）？可发送 - 跳过');
+      }
+
+      case 'teacher_weight': {
+        if (text !== '-') {
+          const n = parseFloat(text);
+          if (!Number.isFinite(n) || n < 30 || n > 200) {
+            return await ctx.reply('请输入有效体重（30-200 的数字），或发送 - 跳过');
+          }
+          ctx.session.tempTeacher!.weightKg = n;
+        }
+        ctx.session.step = 'teacher_bust';
+        return await ctx.reply('👤 简介 5/6：胸围？可发送 - 跳过');
+      }
+
+      case 'teacher_bust': {
+        if (text !== '-') ctx.session.tempTeacher!.bust = text.slice(0, 20);
+        ctx.session.step = 'teacher_services';
+        return await ctx.reply('👤 简介 6/6：服务项目（可多项，用、分隔）。可发送 - 跳过');
+      }
+
+      case 'teacher_services': {
+        if (text !== '-') ctx.session.tempTeacher!.subjects = text.slice(0, 200);
+        ctx.session.step = 'teacher_price_single';
+        return await ctx.reply('💰 价格 1/4：一课价格（如 300元）。可发送 - 跳过');
+      }
+
+      case 'teacher_price_single': {
+        if (text !== '-') ctx.session.tempTeacher!.priceSingle = text.slice(0, 60);
+        ctx.session.step = 'teacher_price_double';
+        return await ctx.reply('💰 价格 2/4：两课价格？可发送 - 跳过');
+      }
+
+      case 'teacher_price_double': {
+        if (text !== '-') ctx.session.tempTeacher!.priceDouble = text.slice(0, 60);
+        ctx.session.step = 'teacher_price_overnight';
+        return await ctx.reply('💰 价格 3/4：包夜价格？可发送 - 跳过');
+      }
+
+      case 'teacher_price_overnight': {
+        if (text !== '-') ctx.session.tempTeacher!.priceOvernight = text.slice(0, 60);
+        ctx.session.step = 'teacher_price_other';
+        return await ctx.reply('💰 价格 4/4：其它价格（如包月、路远加价）。可发送 - 跳过');
+      }
+
+      case 'teacher_price_other': {
+        if (text !== '-') ctx.session.tempTeacher!.priceOther = text.slice(0, 100);
         ctx.session.step = 'teacher_homepage';
-        return await ctx.reply('🔗 请输入您的主页 URL（可选）：', {
+        return await ctx.reply('🔗 请输入您的个人主页链接（可选）：', {
           reply_markup: new InlineKeyboard().text('跳过主页', 'skip_homepage'),
         });
+      }
 
       case 'teacher_homepage':
         if (!/^https?:\/\//i.test(text)) {
@@ -430,6 +511,26 @@ async function askLocation(ctx: MyContext) {
   );
 }
 
+function composeBio(t: NonNullable<BotSession['tempTeacher']>): string | null {
+  const parts: string[] = [];
+  if (t.age) parts.push(`${t.age}岁`);
+  if (t.hometown) parts.push(t.hometown);
+  if (t.heightCm) parts.push(`${t.heightCm}cm`);
+  if (t.weightKg) parts.push(`${t.weightKg}kg`);
+  if (t.bust) parts.push(`胸围 ${t.bust}`);
+  if (t.subjects) parts.push(`服务：${t.subjects}`);
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
+function composePriceInfo(t: NonNullable<BotSession['tempTeacher']>): string | null {
+  const lines: string[] = [];
+  if (t.priceSingle) lines.push(`一课 ${t.priceSingle}`);
+  if (t.priceDouble) lines.push(`两课 ${t.priceDouble}`);
+  if (t.priceOvernight) lines.push(`包夜 ${t.priceOvernight}`);
+  if (t.priceOther) lines.push(`其它 ${t.priceOther}`);
+  return lines.length > 0 ? lines.join('\n') : null;
+}
+
 async function finalizeTeacherOnboarding(ctx: MyContext) {
   const telegramId = BigInt(ctx.from!.id);
   const user = await prisma.user.findUnique({ where: { telegramId } });
@@ -443,36 +544,38 @@ async function finalizeTeacherOnboarding(ctx: MyContext) {
 
   let teacherProfile = await prisma.teacherProfile.findUnique({ where: { userId: user.id } });
 
+  const bio = composeBio(t);
+  const priceInfo = composePriceInfo(t);
+
+  const profileData = {
+    displayName,
+    bio,
+    age: t.age ?? null,
+    hometown: t.hometown ?? null,
+    heightCm: t.heightCm ?? null,
+    weightKg: t.weightKg ?? null,
+    bust: t.bust ?? null,
+    subjects: t.subjects ?? null,
+    priceInfo,
+    homepageUrl: t.homepageUrl || null,
+    latitude: t.latitude!,
+    longitude: t.longitude!,
+    geohash5: encodeGeohash(t.latitude!, t.longitude!, 5),
+    geohash4: encodeGeohash(t.latitude!, t.longitude!, 4),
+    lastLocationAt: new Date(),
+    approvalStatus: 'APPROVED' as const,
+  };
+
   if (teacherProfile) {
     teacherProfile = await prisma.teacherProfile.update({
       where: { id: teacherProfile.id },
-      data: {
-        displayName,
-        bio: t.bio || null,
-        priceInfo: t.priceInfo || null,
-        homepageUrl: t.homepageUrl || null,
-        latitude: t.latitude!,
-        longitude: t.longitude!,
-        geohash5: encodeGeohash(t.latitude!, t.longitude!, 5),
-        geohash4: encodeGeohash(t.latitude!, t.longitude!, 4),
-        lastLocationAt: new Date(),
-        approvalStatus: 'APPROVED',
-      },
+      data: profileData,
     });
   } else {
     teacherProfile = await prisma.teacherProfile.create({
       data: {
         userId: user.id,
-        displayName,
-        bio: t.bio || null,
-        priceInfo: t.priceInfo || null,
-        homepageUrl: t.homepageUrl || null,
-        latitude: t.latitude!,
-        longitude: t.longitude!,
-        geohash5: encodeGeohash(t.latitude!, t.longitude!, 5),
-        geohash4: encodeGeohash(t.latitude!, t.longitude!, 4),
-        lastLocationAt: new Date(),
-        approvalStatus: 'APPROVED',
+        ...profileData,
       },
     });
   }
@@ -518,7 +621,7 @@ async function finalizeTeacherOnboarding(ctx: MyContext) {
   ctx.session = { step: 'done', role: 'TEACHER' };
 
   await ctx.reply(
-    `🎉 老师资料已创建完成！\n\n👤 称呼：${displayName}\n💰 价格：${t.priceInfo || '未设置'}\n📍 位置已记录\n\n现在让我们打开地图吧！`
+    `🎉 老师资料已创建完成！\n\n👤 称呼：${displayName}\n💰 价格：${priceInfo || '未设置'}\n📍 位置已记录\n\n现在让我们打开地图吧！`
   );
 
   await openTeacherMap(ctx, { ...user, teacherProfile });
@@ -530,9 +633,9 @@ async function openTeacherMap(ctx: MyContext, user: any) {
   if (teacherId) {
     const isOnline = user.teacherProfile?.isOnline;
     const toggleKb = new InlineKeyboard()
-      .webApp(isOnline ? '⏸️ 下课（休息）' : '▶️ 上课（开始接单）', `${MINI_APP_URL}/maps`)
+      .webApp(isOnline ? '⏸️ 下课（休息）' : '▶️ 上课（开始接单）', pageUrl('/maps'))
       .row()
-      .webApp('✏️ 编辑资料', `${MINI_APP_URL}/teacher/edit`)
+      .webApp('✏️ 编辑资料', pageUrl('/teacher/edit'))
       .row()
       .text('🔄 切换身份', 'switch_role');
     return await ctx.reply(
@@ -542,7 +645,7 @@ async function openTeacherMap(ctx: MyContext, user: any) {
   }
 
   const kb = new InlineKeyboard()
-    .webApp('🗺️ 打开地图', `${MINI_APP_URL}/maps`)
+    .webApp('🗺️ 打开地图', pageUrl('/maps'))
     .row()
     .text('🔄 切换身份', 'switch_role');
   await ctx.reply(
@@ -554,7 +657,7 @@ async function openTeacherMap(ctx: MyContext, user: any) {
 async function openStudentMap(ctx: MyContext) {
   const firstName = ctx.from?.first_name || '同学';
   const kb = new InlineKeyboard()
-    .webApp('🗺️ 打开地图找老师', `${MINI_APP_URL}/maps`)
+    .webApp('🗺️ 打开地图找老师', pageUrl('/maps'))
     .row()
     .text('🔄 切换身份', 'switch_role');
   await ctx.reply(

@@ -24,7 +24,7 @@ async function ensureAuth(): Promise<boolean> {
     tg.expand();
   }
 
-  const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+  const meRes = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' });
   if (meRes.ok) return true;
 
   const body: any = {};
@@ -199,7 +199,7 @@ export default function MapsPage() {
 
   const getMe = useCallback(async () => {
     try {
-      const res = await fetch('/api/auth/me', { credentials: 'include' });
+      const res = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' });
       if (!res.ok) return null;
       const data = await res.json();
       return data.user;
@@ -310,6 +310,18 @@ export default function MapsPage() {
       }
     })();
   }, []);
+
+  useEffect(() => {
+    const onVisible = async () => {
+      if (document.visibilityState !== 'visible') return;
+      const me = await getMe();
+      if (!me) return;
+      setUser(me);
+      if (me.role === 'STUDENT' && selfPos) loadTeachers(selfPos[0], selfPos[1]);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [getMe, loadTeachers, selfPos]);
 
   useEffect(() => {
     if (!user || !selfPos || user.role !== 'STUDENT') return;
