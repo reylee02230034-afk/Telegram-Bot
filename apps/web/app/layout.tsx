@@ -14,6 +14,7 @@ export const viewport: Viewport = {
 };
 
 const AMAP_KEY = process.env.NEXT_PUBLIC_AMAP_KEY || '';
+const AMAP_SECURITY_CODE = process.env.NEXT_PUBLIC_AMAP_SECURITY_CODE || '';
 
 export default function RootLayout({
   children,
@@ -24,6 +25,13 @@ export default function RootLayout({
     <html lang="zh-CN">
       <head>
         <script src="https://unpkg.com/@twa-dev/sdk@7.0.0/telegram-web-app.js" />
+        {AMAP_KEY && AMAP_SECURITY_CODE && (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `window._AMapSecurityConfig={securityJsCode:'${AMAP_SECURITY_CODE}'}`,
+            }}
+          />
+        )}
         {AMAP_KEY && (
           <script
             async
