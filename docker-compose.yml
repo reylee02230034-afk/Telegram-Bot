@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:15-alpine
     container_name: local-service-postgres
+    command: postgres -c shared_buffers=64MB -c max_connections=40 -c work_mem=4MB
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -15,19 +16,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-
-  redis:
-    image: redis:7-alpine
-    container_name: local-service-redis
-    ports:
-      - "6380:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+    mem_limit: 400m
+    restart: unless-stopped
 
   web:
     build:
@@ -40,16 +30,15 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/local_service?schema=public
-      REDIS_URL: redis://redis:6379
       NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=512
     volumes:
       - media_uploads:/app/storage/uploads
       - ./prisma:/app/prisma:ro
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
+    mem_limit: 700m
     restart: unless-stopped
 
   bot:
@@ -61,13 +50,12 @@ services:
       - .env
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/local_service?schema=public
-      REDIS_URL: redis://redis:6379
       NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=192
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
+    mem_limit: 250m
     restart: unless-stopped
 
   caddy:
@@ -82,11 +70,11 @@ services:
       - caddy_config:/config
     depends_on:
       - web
+    mem_limit: 120m
     restart: unless-stopped
 
 volumes:
   postgres_data:
-  redis_data:
   media_uploads:
   caddy_data:
   caddy_config:

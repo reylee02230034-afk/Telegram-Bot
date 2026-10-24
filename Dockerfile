@@ -12,6 +12,7 @@ FROM base AS builder
 COPY --from=deps /app ./
 WORKDIR /app/apps/web
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_OPTIONS=--max-old-space-size=1024
 ENV JWT_SECRET=docker_build_time_secret_please_ignore
 ENV NODE_ENV=production
 RUN npm run build
