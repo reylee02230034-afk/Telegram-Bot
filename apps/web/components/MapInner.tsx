@@ -14,6 +14,8 @@ interface TeacherMarker {
   displayName: string;
   avatarUrl?: string | null;
   username?: string | null;
+  bio?: string | null;
+  priceInfo?: string | null;
   latitude: number;
   longitude: number;
   distanceKm?: number | null;
@@ -64,6 +66,56 @@ function waitForHeatmap(): Promise<any> {
       resolve(null);
     }
   });
+}
+
+function escapeHtml(s?: string | null): string {
+  return (s ?? '').replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string)
+  );
+}
+
+function createInfoContent(t: TeacherMarker): string {
+  const name = escapeHtml(t.displayName);
+  const price = t.priceInfo
+    ? `<div style="margin-top:6px;font-size:12px;color:#b45309;">💰 ${escapeHtml(t.priceInfo.split('\n')[0])}</div>`
+    : '';
+  const bio = t.bio
+    ? `<div style="margin-top:4px;font-size:12px;color:#64748b;line-height:1.4;">${escapeHtml(t.bio)}</div>`
+    : '';
+  const distance = t.distanceKm != null
+    ? `<div style="font-size:11px;color:#94a3b8;">约 ${t.distanceKm} km</div>`
+    : '';
+  const avatar = t.avatarUrl
+    ? `<img src="${escapeHtml(t.avatarUrl)}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'" />`
+    : (t.isSelf ? '我' : '师');
+
+  const action = t.isSelf
+    ? `<div style="margin-top:6px;font-size:11px;color:#94a3b8;text-align:center;">我的位置</div>`
+    : `<div style="margin-top:8px;">
+         <button id="amap-detail-btn-${t.id}" style="
+           width:100%;padding:6px 12px;background:#3390ec;color:white;
+           border:none;border-radius:14px;cursor:pointer;font-size:13px;font-weight:600;
+         ">查看详情</button>
+       </div>`;
+
+  return `
+    <div style="padding:8px 12px 10px;min-width:170px;max-width:230px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div style="
+          width:38px;height:38px;border-radius:50%;overflow:hidden;flex-shrink:0;
+          background:#e2e8f0;display:flex;align-items:center;justify-content:center;
+          font-size:13px;font-weight:700;color:#64748b;
+        ">${avatar}</div>
+        <div style="min-width:0;">
+          <div style="font-weight:700;font-size:14px;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${name}</div>
+          ${distance}
+        </div>
+      </div>
+      ${price}
+      ${bio}
+      ${action}
+    </div>
+  `;
 }
 
 function createMarkerContent(t: TeacherMarker): string {
@@ -222,21 +274,11 @@ export default function MapInner({
 
             marker.on('click', () => {
               const info = new AMap.InfoWindow({
-                content: `
-                  <div style="padding:4px 8px;text-align:center;min-width:110px;">
-                    <div style="font-weight:700;font-size:14px;color:#1e293b;">${t.displayName}</div>
-                    ${t.distanceKm != null ? `<div style="font-size:12px;color:#64748b;margin-top:2px;">约 ${t.distanceKm} km</div>` : ''}
-                    <div style="margin-top:8px;">
-                      <button id="amap-detail-btn-${t.id}" style="
-                        padding:4px 12px;background:#3390ec;color:white;
-                        border:none;border-radius:16px;cursor:pointer;font-size:13px;
-                      ">查看详情</button>
-                    </div>
-                  </div>
-                `,
+                content: createInfoContent(t),
                 offset: new AMap.Pixel(0, -20),
               });
               info.open(map, [t.longitude, t.latitude]);
+              if (t.isSelf) return;
               setTimeout(() => {
                 const btn = document.getElementById(`amap-detail-btn-${t.id}`);
                 btn?.addEventListener('click', () => clickHandlerRef.current(t.id));

@@ -39,7 +39,7 @@ export async function POST(req: Request) {
 
   const updated = await prisma.user.update({
     where: { id: user.id },
-    data: { role, hasOnboarded: true },
+    data: { role, hasOnboarded: role === 'STUDENT' ? true : user.hasOnboarded },
     include: { teacherProfile: true },
   });
 

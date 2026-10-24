@@ -235,7 +235,8 @@ export default function MapsPage() {
       if (data.ok) {
         setTeachers(data.teachers.map((t: any) => ({
           id: t.id, displayName: t.displayName, avatarUrl: t.avatarUrl,
-          username: t.username, latitude: t.latitude, longitude: t.longitude,
+          username: t.username, bio: t.bio, priceInfo: t.priceInfo,
+          latitude: t.latitude, longitude: t.longitude,
           distanceKm: t.distanceKm, isOnline: true,
         })));
       }
@@ -250,7 +251,8 @@ export default function MapsPage() {
         if (parsed.teachers) {
           setTeachers(parsed.teachers.map((t: any) => ({
             id: t.id, displayName: t.displayName, avatarUrl: t.avatarUrl,
-            username: t.username, latitude: t.latitude, longitude: t.longitude,
+            username: t.username, bio: t.bio, priceInfo: t.priceInfo,
+            latitude: t.latitude, longitude: t.longitude,
             isOnline: true,
           })));
         }
@@ -263,6 +265,7 @@ export default function MapsPage() {
           setTeachers((prev) => prev.some((t) => t.id === parsed.teacher.id) ? prev : [...prev, {
             id: parsed.teacher.id, displayName: parsed.teacher.displayName || '老师',
             avatarUrl: parsed.teacher.avatarUrl, username: parsed.teacher.username,
+            bio: parsed.teacher.bio, priceInfo: parsed.teacher.priceInfo,
             latitude: parsed.teacher.latitude, longitude: parsed.teacher.longitude, isOnline: true,
           }]);
         }
@@ -370,10 +373,6 @@ export default function MapsPage() {
       const data = await res.json();
       if (data.ok) {
         setUser((prev: any) => ({ ...prev, teacherProfile: { ...prev.teacherProfile, isOnline: newOnline } }));
-        if (newOnline && user.role === 'TEACHER') {
-          loadTeachers(pos[0], pos[1]);
-          subscribeSSE();
-        }
       }
     } finally {
       setToggling(false);
@@ -429,13 +428,8 @@ export default function MapsPage() {
       : selfPos ? { id: 'self', displayName: '我', latitude: selfPos[0], longitude: selfPos[1], isSelf: true }
       : null;
 
-  const mapTeachers = selfMarker ? [...teachers, selfMarker] : teachers;
-
   if (loading) return <LoadingSpinner />;
   if (error) return <ErrorView msg={error} />;
-  if (user && !user.hasOnboarded) {
-    return <RoleSelect onSelect={chooseRole} saving={roleSaving} error={roleError} />;
-  }
   if (user?.role === 'TEACHER' && !user.teacherProfile) {
     return (
       <div style={{
@@ -472,9 +466,15 @@ export default function MapsPage() {
       </div>
     );
   }
+  if (user && !user.hasOnboarded) {
+    return <RoleSelect onSelect={chooseRole} saving={roleSaving} error={roleError} />;
+  }
 
   const isTeacher = user?.role === 'TEACHER';
   const isOnline = user?.teacherProfile?.isOnline;
+  const mapTeachers = isTeacher
+    ? (selfMarker ? [selfMarker] : [])
+    : (selfMarker ? [...teachers, selfMarker] : teachers);
 
   return (
     <div style={{ height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>

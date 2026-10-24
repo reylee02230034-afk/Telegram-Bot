@@ -21,6 +21,8 @@ export async function GET(req: Request) {
           select: {
             id: true,
             displayName: true,
+            bio: true,
+            priceInfo: true,
             latitude: true,
             longitude: true,
             isOnline: true,
@@ -33,6 +35,8 @@ export async function GET(req: Request) {
             teachers: teachers.map((t: any) => ({
               id: t.id,
               displayName: t.displayName,
+              bio: t.bio,
+              priceInfo: t.priceInfo,
               latitude: Math.round((t.latitude + (Math.random() - 0.5) * 0.009) * 100) / 100,
               longitude: Math.round((t.longitude + (Math.random() - 0.5) * 0.009) * 100) / 100,
               avatarUrl: t.user?.avatarUrl,

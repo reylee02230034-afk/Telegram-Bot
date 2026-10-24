@@ -247,10 +247,24 @@ export default function TeacherEditPage() {
       });
       const data = await res.json();
       if (data.ok) {
-        setMessage(isNewProfile ? '✅ 老师资料已创建，即将进入地图' : '✅ 资料已更新');
         if (isNewProfile) {
-          setTimeout(() => { window.location.href = '/maps'; }, 1200);
+          const t = data.teacher;
+          setTeacher({
+            displayName: t.displayName,
+            bio: t.bio,
+            age: t.age,
+            heightCm: t.heightCm,
+            weightKg: t.weightKg,
+            subjects: t.subjects,
+            priceInfo: t.priceInfo,
+            coverPhotoUrl: t.coverPhotoUrl,
+            homepageUrl: t.homepageUrl,
+            media: [],
+          });
+          setIsNewProfile(false);
+          setMessage('✅ 资料已创建，可以继续上传照片/视频');
         } else {
+          setMessage('✅ 资料已更新');
           setTimeout(() => setMessage(null), 2000);
         }
       } else {
@@ -343,8 +357,10 @@ export default function TeacherEditPage() {
           color: 'white', fontSize: 18, textDecoration: 'none',
         }}>←</a>
         <div style={{ marginTop: 36 }}>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>✏️ 编辑老师资料</div>
-          <div style={{ fontSize: 13, opacity: 0.9, marginTop: 4 }}>修改后立即对学生可见</div>
+          <div style={{ fontSize: 18, fontWeight: 700 }}>{isNewProfile ? '👨‍🏫 完善老师资料' : '✏️ 编辑老师资料'}</div>
+          <div style={{ fontSize: 13, opacity: 0.9, marginTop: 4 }}>
+            {isNewProfile ? '填写后即可出现在学生地图上' : '修改后立即对学生可见'}
+          </div>
         </div>
       </div>
 

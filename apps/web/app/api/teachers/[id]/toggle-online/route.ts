@@ -47,10 +47,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const updated = await prisma.teacherProfile.update({
     where: { id },
     data: updateData,
+    include: { user: { select: { avatarUrl: true, username: true } } },
   });
 
   try {
-    triggerOnlineChange(id, !!online, { id });
+    if (online) {
+      triggerOnlineChange(id, true, {
+        id,
+        displayName: updated.displayName,
+        bio: updated.bio,
+        priceInfo: updated.priceInfo,
+        latitude: Math.round((updated.latitude + (Math.random() - 0.5) * 0.009) * 100) / 100,
+        longitude: Math.round((updated.longitude + (Math.random() - 0.5) * 0.009) * 100) / 100,
+        avatarUrl: updated.user?.avatarUrl,
+        username: updated.user?.username,
+      });
+    } else {
+      triggerOnlineChange(id, false);
+    }
   } catch {}
 
   return NextResponse.json({
