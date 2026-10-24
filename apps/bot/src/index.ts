@@ -108,21 +108,7 @@ function makeBot(): Bot<MyContext> {
     if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
       return await ctx.reply('管理员无法切换身份');
     }
-
-    const pending = await prisma.roleSwitchRequest.findFirst({
-      where: { userId: user.id, status: 'PENDING' },
-    });
-    if (pending) {
-      return await ctx.reply('⏳ 您已有待审核的身份切换申请，请耐心等待管理员处理。');
-    }
-
-    const target = user.role === 'STUDENT' ? 'TEACHER' : 'STUDENT';
-    const request = await prisma.roleSwitchRequest.create({
-      data: { userId: user.id, requestedRole: target },
-    });
-    await ctx.reply(
-      `📝 身份切换申请已提交！\n\n当前身份：${user.role === 'STUDENT' ? '🎓 学生' : '👨‍🏫 老师'}\n申请身份：${target === 'STUDENT' ? '🎓 学生' : '👨‍🏫 老师'}\n申请 ID：${request.id}\n\n审核通过后将自动切换。`
-    );
+    await askSwitchConfirm(ctx, user.role as BotRole);
   });
 
   bot.callbackQuery('role_teacher', async (ctx) => {
@@ -181,6 +167,73 @@ function makeBot(): Bot<MyContext> {
     ctx.session = { step: 'done', role: 'STUDENT' };
     await ctx.answerCallbackQuery();
     await openStudentMap(ctx);
+  });
+
+  bot.callbackQuery('switch_role', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const user = await prisma.user.findUnique({
+      where: { telegramId: BigInt(ctx.from!.id) },
+    });
+    if (!user) return await ctx.reply('请先发送 /start');
+    if (user.role === 'ADMIN' || user.role === 'SUPER_ADMIN') {
+      return await ctx.reply('管理员无法切换身份');
+    }
+    await askSwitchConfirm(ctx, user.role as BotRole);
+  });
+
+  bot.callbackQuery('switch_cancel', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.reply('已取消切换。发送 /start 可查看当前身份。');
+  });
+
+  bot.callbackQuery('switch_to_teacher', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const telegramId = BigInt(ctx.from!.id);
+    const user = await prisma.user.findUnique({
+      where: { telegramId },
+      include: { teacherProfile: true },
+    });
+    if (!user) return await ctx.reply('请先发送 /start');
+    if (user.role === 'TEACHER') return await ctx.reply('您当前已经是老师身份。');
+
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: { role: 'TEACHER', hasOnboarded: !!user.teacherProfile },
+    });
+    await prisma.studentPresence.deleteMany({ where: { userId: user.id } });
+
+    ctx.session = { step: 'awaiting_role', role: 'TEACHER' };
+    await ctx.reply('🔄 已切换为老师身份。');
+    if (!user.teacherProfile) {
+      return await startTeacherOnboarding(ctx, updated);
+    }
+    return await openTeacherMap(ctx, { ...updated, teacherProfile: user.teacherProfile });
+  });
+
+  bot.callbackQuery('switch_to_student', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const telegramId = BigInt(ctx.from!.id);
+    const user = await prisma.user.findUnique({
+      where: { telegramId },
+      include: { teacherProfile: true },
+    });
+    if (!user) return await ctx.reply('请先发送 /start');
+    if (user.role === 'STUDENT') return await ctx.reply('您当前已经是学生身份。');
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { role: 'STUDENT', hasOnboarded: true },
+    });
+    if (user.teacherProfile) {
+      await prisma.teacherProfile.update({
+        where: { id: user.teacherProfile.id },
+        data: { isOnline: false, onlineSince: null },
+      });
+    }
+
+    ctx.session = { step: 'done', role: 'STUDENT' };
+    await ctx.reply('🔄 已切换为学生身份。');
+    return await openStudentMap(ctx);
   });
 
   bot.callbackQuery('skip_media', async (ctx) => {
@@ -304,7 +357,7 @@ function makeBot(): Bot<MyContext> {
 
       default:
         return await ctx.reply(
-          '请按引导操作，或发送 /start 重新开始。\n\n📌 常用命令：\n/start - 主菜单\n/switchrole - 申请切换身份'
+          '请按引导操作，或发送 /start 重新开始。\n\n📌 常用命令：\n/start - 主菜单\n/switchrole - 切换身份'
         );
     }
   });
@@ -333,6 +386,28 @@ async function askRole(ctx: MyContext) {
     .text('👨‍🏫 我是老师', 'role_teacher')
     .text('🎓 我是学生', 'role_student');
   await ctx.reply('👋 欢迎来到约课机器人！\n\n请选择您的身份：', { reply_markup: kb });
+}
+
+async function askSwitchConfirm(ctx: MyContext, current: BotRole) {
+  const target: BotRole = current === 'STUDENT' ? 'TEACHER' : 'STUDENT';
+  const kb = new InlineKeyboard()
+    .text(
+      target === 'TEACHER' ? '✅ 切换为老师' : '✅ 切换为学生',
+      target === 'TEACHER' ? 'switch_to_teacher' : 'switch_to_student'
+    )
+    .row()
+    .text('取消', 'switch_cancel');
+
+  await ctx.reply(
+    `当前身份：${current === 'STUDENT' ? '🎓 学生' : '👨‍🏫 老师'}\n\n确定切换为${
+      target === 'TEACHER' ? '👨‍🏫 老师' : '🎓 学生'
+    }吗？\n\n${
+      target === 'TEACHER'
+        ? '切换后需要完善老师资料（照片 / 简介 / 价格 / 位置）。'
+        : '您已有的老师资料会保留并自动下线，下次切回老师无需重新填写。'
+    }`,
+    { reply_markup: kb }
+  );
 }
 
 async function startTeacherOnboarding(ctx: MyContext, user: any) {
@@ -457,7 +532,9 @@ async function openTeacherMap(ctx: MyContext, user: any) {
     const toggleKb = new InlineKeyboard()
       .webApp(isOnline ? '⏸️ 下课（休息）' : '▶️ 上课（开始接单）', `${MINI_APP_URL}/maps`)
       .row()
-      .webApp('✏️ 编辑资料', `${MINI_APP_URL}/teacher/edit`);
+      .webApp('✏️ 编辑资料', `${MINI_APP_URL}/teacher/edit`)
+      .row()
+      .text('🔄 切换身份', 'switch_role');
     return await ctx.reply(
       `👨‍🏫 ${user.firstName || '老师'}，当前状态：${isOnline ? '🟢 上课中' : '🔴 休息中'}\n\n${isOnline ? '学生可以在地图上看到您。' : '点击下方"上课"按钮开始接单。'}`,
       { reply_markup: toggleKb }
@@ -465,7 +542,9 @@ async function openTeacherMap(ctx: MyContext, user: any) {
   }
 
   const kb = new InlineKeyboard()
-    .webApp('🗺️ 打开地图', `${MINI_APP_URL}/maps`);
+    .webApp('🗺️ 打开地图', `${MINI_APP_URL}/maps`)
+    .row()
+    .text('🔄 切换身份', 'switch_role');
   await ctx.reply(
     '🗺️ 进入地图可以：\n• 查看自己的位置\n• 切换上课/下课模式\n• 编辑资料和媒体',
     { reply_markup: kb }
@@ -475,7 +554,9 @@ async function openTeacherMap(ctx: MyContext, user: any) {
 async function openStudentMap(ctx: MyContext) {
   const firstName = ctx.from?.first_name || '同学';
   const kb = new InlineKeyboard()
-    .webApp('🗺️ 打开地图找老师', `${MINI_APP_URL}/maps`);
+    .webApp('🗺️ 打开地图找老师', `${MINI_APP_URL}/maps`)
+    .row()
+    .text('🔄 切换身份', 'switch_role');
   await ctx.reply(
     `🎓 欢迎回来，${firstName}！\n\n点击下方打开地图，查看附近在线的老师。`,
     { reply_markup: kb }

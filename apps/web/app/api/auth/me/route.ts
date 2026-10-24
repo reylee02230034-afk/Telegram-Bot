@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAuthFromRequest } from '@/lib/auth';
+import { getAuthFromRequest, signAuthCookies } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 
 export const runtime = 'nodejs';
@@ -24,6 +24,16 @@ export async function GET(req: Request) {
   });
 
   if (!user) return NextResponse.json({ error: '用户不存在' }, { status: 404 });
+
+  if (auth.role !== user.role || auth.isTeacher !== !!user.teacherProfile) {
+    await signAuthCookies({
+      userId: user.id,
+      telegramId: user.telegramId.toString(),
+      role: user.role as 'STUDENT' | 'TEACHER' | 'ADMIN' | 'SUPER_ADMIN',
+      isTeacher: !!user.teacherProfile,
+      teacherId: user.teacherProfile?.id,
+    });
+  }
 
   return NextResponse.json({
     ok: true,
