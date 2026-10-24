@@ -112,6 +112,79 @@ function ErrorView({ msg, onRetry }: { msg: string; onRetry?: () => void }) {
   );
 }
 
+function RoleSelect({ onSelect, saving, error }: {
+  onSelect: (role: 'STUDENT' | 'TEACHER') => void;
+  saving: 'STUDENT' | 'TEACHER' | null;
+  error?: string | null;
+}) {
+  return (
+    <div style={{
+      height: '100dvh',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 14,
+      padding: 24,
+      background: 'linear-gradient(180deg, #f0f7ff 0%, #e6f0ff 100%)',
+    }}>
+      <div style={{ fontSize: 40 }}>👋</div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: '#1e293b' }}>请选择您的身份</div>
+      <div style={{ fontSize: 13, color: '#64748b', textAlign: 'center', maxWidth: 300, marginBottom: 6 }}>
+        选择后即进入对应界面，身份将用于决定您在地图上的角色
+      </div>
+
+      {[
+        { role: 'TEACHER' as const, icon: '👨‍🏫', title: '我是老师', desc: '上传资料，在地图上接单' },
+        { role: 'STUDENT' as const, icon: '🎓', title: '我是学生', desc: '查看附近在线的老师' },
+      ].map((opt) => (
+        <button
+          key={opt.role}
+          onClick={() => onSelect(opt.role)}
+          disabled={!!saving}
+          style={{
+            width: '100%',
+            maxWidth: 340,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 14,
+            padding: '16px 18px',
+            background: 'white',
+            border: '1px solid #e2e8f0',
+            borderRadius: 16,
+            cursor: saving ? 'not-allowed' : 'pointer',
+            opacity: saving && saving !== opt.role ? 0.5 : 1,
+            textAlign: 'left',
+            boxShadow: '0 2px 10px rgba(51,144,236,0.10)',
+          }}
+        >
+          <span style={{ fontSize: 30 }}>{opt.icon}</span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 16, fontWeight: 700, color: '#1e293b' }}>{opt.title}</span>
+            <span style={{ display: 'block', fontSize: 12, color: '#64748b', marginTop: 3 }}>{opt.desc}</span>
+          </span>
+          <span style={{ fontSize: 14, color: '#3390ec', fontWeight: 600 }}>
+            {saving === opt.role ? '处理中…' : '选择'}
+          </span>
+        </button>
+      ))}
+
+      {error && (
+        <div style={{
+          maxWidth: 340,
+          width: '100%',
+          padding: '10px 14px',
+          background: '#fef2f2',
+          color: '#b91c1c',
+          borderRadius: 10,
+          fontSize: 13,
+          textAlign: 'center',
+        }}>{error}</div>
+      )}
+    </div>
+  );
+}
+
 export default function MapsPage() {
   const [user, setUser] = useState<any>(null);
   const [center, setCenter] = useState<[number, number]>([39.9123, 116.4567]);
@@ -121,6 +194,8 @@ export default function MapsPage() {
   const [error, setError] = useState<string | null>(null);
   const [toggling, setToggling] = useState(false);
   const [heatmapPoints, setHeatmapPoints] = useState<{ lng: number; lat: number; count: number }[]>([]);
+  const [roleSaving, setRoleSaving] = useState<'STUDENT' | 'TEACHER' | null>(null);
+  const [roleError, setRoleError] = useState<string | null>(null);
 
   const getMe = useCallback(async () => {
     try {
@@ -214,6 +289,10 @@ export default function MapsPage() {
         const me = await getMe();
         if (!me) { setError('用户信息加载失败，请重新打开'); setLoading(false); return; }
         setUser(me);
+        if (!me.hasOnboarded) {
+          setLoading(false);
+          return;
+        }
         const pos = await locate();
         setCenter(pos);
         setSelfPos(pos);
@@ -308,6 +387,34 @@ export default function MapsPage() {
     if (user?.role === 'STUDENT') loadTeachers(pos[0], pos[1]);
   };
 
+  const chooseRole = async (role: 'STUDENT' | 'TEACHER') => {
+    if (roleSaving) return;
+    setRoleSaving(role);
+    setRoleError(null);
+    try {
+      const res = await fetch('/api/auth/role', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setRoleError(data.error || '身份设置失败，请重试');
+        setRoleSaving(null);
+        return;
+      }
+      if (role === 'TEACHER') {
+        window.location.href = '/teacher/edit?new=1';
+        return;
+      }
+      window.location.reload();
+    } catch {
+      setRoleError('网络错误，请重试');
+      setRoleSaving(null);
+    }
+  };
+
   const handleMarkerClick = (id: string) => {
     if (user?.teacherProfile?.id === id) return;
     window.location.href = `/teachers/${id}`;
@@ -326,6 +433,45 @@ export default function MapsPage() {
 
   if (loading) return <LoadingSpinner />;
   if (error) return <ErrorView msg={error} />;
+  if (user && !user.hasOnboarded) {
+    return <RoleSelect onSelect={chooseRole} saving={roleSaving} error={roleError} />;
+  }
+  if (user?.role === 'TEACHER' && !user.teacherProfile) {
+    return (
+      <div style={{
+        height: '100dvh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 14,
+        padding: 24,
+        textAlign: 'center',
+        background: 'linear-gradient(180deg, #f0f7ff 0%, #e6f0ff 100%)',
+      }}>
+        <div style={{ fontSize: 40 }}>👨‍🏫</div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: '#1e293b' }}>最后一步：完善老师资料</div>
+        <div style={{ fontSize: 13, color: '#64748b', maxWidth: 300 }}>
+          填写称呼、价格、简介和位置后，您就会出现在学生地图上，可以开始接单。
+        </div>
+        <button
+          onClick={() => { window.location.href = '/teacher/edit?new=1'; }}
+          style={{
+            marginTop: 6,
+            padding: '13px 32px',
+            background: 'linear-gradient(135deg, #3390ec 0%, #1d4ed8 100%)',
+            color: 'white',
+            border: 'none',
+            borderRadius: 24,
+            fontSize: 15,
+            fontWeight: 700,
+            cursor: 'pointer',
+            boxShadow: '0 4px 14px rgba(51,144,236,0.35)',
+          }}
+        >开始填写资料</button>
+      </div>
+    );
+  }
 
   const isTeacher = user?.role === 'TEACHER';
   const isOnline = user?.teacherProfile?.isOnline;

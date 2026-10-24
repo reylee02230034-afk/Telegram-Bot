@@ -101,8 +101,28 @@ async function ensureAuth(): Promise<boolean> {
   return loginRes.ok;
 }
 
+function getPosition(): Promise<[number, number] | null> {
+  return new Promise((resolve) => {
+    if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
+      resolve(null);
+      return;
+    }
+    let done = false;
+    const finish = (v: [number, number] | null) => {
+      if (!done) { done = true; resolve(v); }
+    };
+    const timer = setTimeout(() => finish(null), 8000);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { clearTimeout(timer); finish([pos.coords.latitude, pos.coords.longitude]); },
+      () => { clearTimeout(timer); finish(null); },
+      { enableHighAccuracy: false, timeout: 7000, maximumAge: 60000 }
+    );
+  });
+}
+
 export default function TeacherEditPage() {
   const [teacher, setTeacher] = useState<TeacherData | null>(null);
+  const [isNewProfile, setIsNewProfile] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -133,12 +153,24 @@ export default function TeacherEditPage() {
       }
       const res = await fetch('/api/auth/me');
       const data = await res.json();
-      if (!data.ok || !data.user?.teacherProfile) {
-        setError('您还没有老师资料，请先通过机器人完成身份注册');
+      if (!data.ok || !data.user) {
+        setError('用户信息加载失败，请重新打开');
         setLoading(false);
         return;
       }
-      const tp = data.user.teacherProfile;
+      const me = data.user;
+      const tp = me.teacherProfile;
+      if (!tp) {
+        if (me.role !== 'TEACHER') {
+          setError('您还不是老师身份，请先在地图页选择「我是老师」');
+          setLoading(false);
+          return;
+        }
+        setIsNewProfile(true);
+        setDisplayName(me.firstName || '');
+        setLoading(false);
+        return;
+      }
       setTeacher({
         displayName: tp.displayName,
         bio: tp.bio,
@@ -183,7 +215,7 @@ export default function TeacherEditPage() {
     setSaving(true);
     setMessage(null);
     try {
-      const body = {
+      const body: any = {
         displayName,
         bio: bio || null,
         age: age ? parseInt(age) : null,
@@ -194,6 +226,19 @@ export default function TeacherEditPage() {
         coverPhotoUrl: coverPhotoUrl || null,
         homepageUrl: homepageUrl || null,
       };
+      if (isNewProfile) {
+        if (!displayName.trim()) {
+          setMessage('❌ 请填写称呼');
+          return;
+        }
+        const pos = await getPosition();
+        if (!pos) {
+          setMessage('❌ 无法获取位置，请允许定位后重试');
+          return;
+        }
+        body.latitude = pos[0];
+        body.longitude = pos[1];
+      }
       const res = await fetch('/api/teachers/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -202,8 +247,12 @@ export default function TeacherEditPage() {
       });
       const data = await res.json();
       if (data.ok) {
-        setMessage('✅ 资料已更新');
-        setTimeout(() => setMessage(null), 2000);
+        setMessage(isNewProfile ? '✅ 老师资料已创建，即将进入地图' : '✅ 资料已更新');
+        if (isNewProfile) {
+          setTimeout(() => { window.location.href = '/maps'; }, 1200);
+        } else {
+          setTimeout(() => setMessage(null), 2000);
+        }
       } else {
         setMessage(`❌ ${data.error || '保存失败'}`);
       }
@@ -217,6 +266,11 @@ export default function TeacherEditPage() {
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+    if (isNewProfile) {
+      setMessage('❌ 请先保存资料，再上传作品');
+      e.target.value = '';
+      return;
+    }
     setUploading(true);
     setMessage(null);
     try {
@@ -264,7 +318,9 @@ export default function TeacherEditPage() {
 
   if (loading) return <div style={{ padding: 24, textAlign: 'center' }}>加载中...</div>;
   if (error) return <div style={{ padding: 24, textAlign: 'center', color: '#ef4444' }}>{error}</div>;
-  if (!teacher) return null;
+  if (!teacher && !isNewProfile) return null;
+
+  const mediaList = teacher?.media ?? [];
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0',
@@ -405,15 +461,17 @@ export default function TeacherEditPage() {
         <div style={{ background: 'white', borderRadius: 12, padding: 16, marginBottom: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <label style={{ fontSize: 12, color: '#64748b' }}>📸 作品展示</label>
-            <label style={{ padding: '6px 14px', background: '#3390ec', color: 'white', borderRadius: 16, fontSize: 13, cursor: 'pointer' }}>
-              {uploading ? '上传中...' : '➕ 添加'}
-              <input type="file" multiple accept="image/*,video/*" onChange={handleUpload} style={{ display: 'none' }} />
-            </label>
+            {!isNewProfile && (
+              <label style={{ padding: '6px 14px', background: '#3390ec', color: 'white', borderRadius: 16, fontSize: 13, cursor: 'pointer' }}>
+                {uploading ? '上传中...' : '➕ 添加'}
+                <input type="file" multiple accept="image/*,video/*" onChange={handleUpload} style={{ display: 'none' }} />
+              </label>
+            )}
           </div>
 
-          {teacher.media.length > 0 ? (
+          {mediaList.length > 0 ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-              {teacher.media.map((m) => (
+              {mediaList.map((m) => (
                 <div key={m.id} style={{ position: 'relative', aspectRatio: '1', borderRadius: 8, overflow: 'hidden', background: '#f1f5f9' }}>
                   {m.type === 'VIDEO' ? (
                     <video src={m.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
