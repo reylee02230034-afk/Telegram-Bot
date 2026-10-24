@@ -24,7 +24,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <head>
-        <script src="https://unpkg.com/@twa-dev/sdk@7.0.0/telegram-web-app.js" />
+        <script src="https://telegram.org/js/telegram-web-app.js" />
         {AMAP_KEY && AMAP_SECURITY_CODE && (
           <script
             dangerouslySetInnerHTML={{

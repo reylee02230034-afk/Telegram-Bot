@@ -24,35 +24,33 @@ async function ensureAuth(): Promise<boolean> {
     tg.expand();
   }
 
-  const meRes = await fetch(`/api/auth/me?_t=${Date.now()}`, { credentials: 'include', cache: 'no-store' });
-  if (meRes.ok) return true;
-
-  const body: any = {};
+  // 只要有真实 Telegram 身份，就强制以 initData 登录，覆盖任何残留的旧 cookie
   if (tg?.initData) {
     const params = new URLSearchParams(tg.initData);
     const userJson = params.get('user');
-    body.initData = tg.initData;
+    let telegramId = '';
+    let firstName = '';
+    let username = '';
     if (userJson) {
       try {
         const u = JSON.parse(userJson);
-        body.telegramId = String(u.id);
-        body.firstName = u.first_name || '';
-        body.username = u.username || '';
+        telegramId = String(u.id);
+        firstName = u.first_name || '';
+        username = u.username || '';
       } catch {}
     }
-  } else {
-    body.dev = true;
-    body.telegramId = '100000001';
-    body.firstName = '访客';
+    const loginRes = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData: tg.initData, telegramId, firstName, username }),
+      credentials: 'include',
+    });
+    return loginRes.ok;
   }
 
-  const loginRes = await fetch('/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    credentials: 'include',
-  });
-  return loginRes.ok;
+  // 非 Telegram 环境（开发预览），仅依赖已有 cookie
+  const meRes = await fetch(`/api/auth/me?_t=${Date.now()}`, { credentials: 'include', cache: 'no-store' });
+  return meRes.ok;
 }
 
 function LoadingSpinner() {
