@@ -24,7 +24,7 @@ async function ensureAuth(): Promise<boolean> {
     tg.expand();
   }
 
-  const meRes = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' });
+  const meRes = await fetch(`/api/auth/me?_t=${Date.now()}`, { credentials: 'include', cache: 'no-store' });
   if (meRes.ok) return true;
 
   const body: any = {};
@@ -199,7 +199,7 @@ export default function MapsPage() {
 
   const getMe = useCallback(async () => {
     try {
-      const res = await fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' });
+      const res = await fetch(`/api/auth/me?_t=${Date.now()}`, { credentials: 'include', cache: 'no-store' });
       if (!res.ok) return null;
       const data = await res.json();
       return data.user;

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAuthFromRequest, signAuthCookies } from '@/lib/auth';
+import { AUTH_COOKIE_OPTIONS, createToken, getAuthFromRequest } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 
 export const runtime = 'nodejs';
@@ -27,17 +27,11 @@ export async function GET(req: Request) {
 
   if (!user) return NextResponse.json({ error: '用户不存在' }, { status: 404, headers: NO_STORE });
 
-  if (auth.role !== user.role || auth.isTeacher !== !!user.teacherProfile) {
-    await signAuthCookies({
-      userId: user.id,
-      telegramId: user.telegramId.toString(),
-      role: user.role as 'STUDENT' | 'TEACHER' | 'ADMIN' | 'SUPER_ADMIN',
-      isTeacher: !!user.teacherProfile,
-      teacherId: user.teacherProfile?.id,
-    });
-  }
+  console.log(
+    `[auth/me] userId=${user.id} tokenRole=${auth.role} dbRole=${user.role} isTeacher=${!!user.teacherProfile}`
+  );
 
-  return NextResponse.json({
+  const res = NextResponse.json({
     ok: true,
     user: {
       id: user.id,
@@ -73,4 +67,18 @@ export async function GET(req: Request) {
         : null,
     },
   }, { headers: NO_STORE });
+
+  // token 与数据库角色不一致时重新签发 cookie（直接写入响应，确保 Set-Cookie 生效）
+  if (auth.role !== user.role || auth.isTeacher !== !!user.teacherProfile) {
+    const token = await createToken({
+      userId: user.id,
+      telegramId: user.telegramId.toString(),
+      role: user.role as 'STUDENT' | 'TEACHER' | 'ADMIN' | 'SUPER_ADMIN',
+      isTeacher: !!user.teacherProfile,
+      teacherId: user.teacherProfile?.id,
+    });
+    res.cookies.set('auth_token', token, AUTH_COOKIE_OPTIONS);
+  }
+
+  return res;
 }

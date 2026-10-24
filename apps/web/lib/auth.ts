@@ -33,17 +33,21 @@ export async function verifyToken(token: string): Promise<AuthPayload | null> {
   }
 }
 
+export const AUTH_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const,
+  path: '/',
+  maxAge: 60 * 60 * 24 * 7,
+};
+
 export async function signAuthCookies(payload: AuthPayload) {
   const token = await createToken(payload);
   const cookieStore = await cookies();
   cookieStore.set({
     name: 'auth_token',
     value: token,
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 60 * 60 * 24 * 7,
+    ...AUTH_COOKIE_OPTIONS,
   });
   return token;
 }

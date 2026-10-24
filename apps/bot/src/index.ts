@@ -224,6 +224,7 @@ function makeBot(): Bot<MyContext> {
       data: { role: 'TEACHER', hasOnboarded: !!user.teacherProfile },
     });
     await prisma.studentPresence.deleteMany({ where: { userId: user.id } });
+    console.log(`[Bot] switch_to_teacher userId=${user.id} role=${updated.role} hasProfile=${!!user.teacherProfile}`);
 
     ctx.session = { step: 'awaiting_role', role: 'TEACHER' };
     await ctx.reply('🔄 已切换为老师身份。');
@@ -243,10 +244,11 @@ function makeBot(): Bot<MyContext> {
     if (!user) return await ctx.reply('请先发送 /start');
     if (user.role === 'STUDENT') return await ctx.reply('您当前已经是学生身份。');
 
-    await prisma.user.update({
+    const updated = await prisma.user.update({
       where: { id: user.id },
       data: { role: 'STUDENT', hasOnboarded: true },
     });
+    console.log(`[Bot] switch_to_student userId=${user.id} role=${updated.role}`);
     if (user.teacherProfile) {
       await prisma.teacherProfile.update({
         where: { id: user.teacherProfile.id },

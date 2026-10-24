@@ -85,7 +85,7 @@ async function ensureAuth(): Promise<boolean> {
     tg.ready();
     tg.expand();
   }
-  const meRes = await fetch('/api/auth/me', { cache: 'no-store' });
+  const meRes = await fetch(`/api/auth/me?_t=${Date.now()}`, { cache: 'no-store' });
   if (meRes.ok) return true;
   if (!tg || !tg.initData) return false;
 
@@ -163,7 +163,7 @@ export default function TeacherEditPage() {
         setLoading(false);
         return;
       }
-      const res = await fetch('/api/auth/me');
+      const res = await fetch(`/api/auth/me?_t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json();
       if (!data.ok || !data.user) {
         setError('用户信息加载失败，请重新打开');
@@ -310,7 +310,7 @@ export default function TeacherEditPage() {
           setMessage(`❌ ${data.error || '上传失败'}`);
         }
       }
-      const meRes = await fetch('/api/auth/me', { cache: 'no-store' });
+      const meRes = await fetch(`/api/auth/me?_t=${Date.now()}`, { cache: 'no-store' });
       const meData = await meRes.json();
       if (meData.ok && meData.user?.teacherProfile) {
         setTeacher((t) => t ? { ...t, media: meData.user.teacherProfile.media } : t);
